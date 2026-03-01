@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 import time
 import json
 from datetime import datetime
@@ -15,7 +17,7 @@ load_dotenv(os.path.expanduser("~/.env"))
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 YOUTUBE_API_KEY   = os.environ.get("YOUTUBE_API_KEY")
 TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHANNEL_ID")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_JIHA_ID")
 
 if not all([ANTHROPIC_API_KEY, YOUTUBE_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
     missing = [k for k, v in {
@@ -117,9 +119,9 @@ def get_latest_video(channel_name: str, channel_id: str, keyword: str = None) ->
 
 
 # ────────────────────────────────────────────────
-# 2) 자막 추출
+# 2) 자막 추출 (유튜브 자막 → 없으면 Whisper 자동생성)
 # ────────────────────────────────────────────────
-def get_transcript(video_id: str) -> str | None:
+def _get_youtube_transcript(video_id: str) -> str | None:
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
         from youtube_transcript_api._errors import NoTranscriptFound
@@ -127,40 +129,104 @@ def get_transcript(video_id: str) -> str | None:
         try:
             transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko"])
         except NoTranscriptFound:
-            try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-                transcript = transcript_list.find_generated_transcript(["ko", "en"]).fetch()
-            except Exception:
-                return None
-
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript = transcript_list.find_generated_transcript(["ko", "en"]).fetch()
         full_text = " ".join([t["text"] for t in transcript])
         return full_text[:8000]
-
     except Exception:
         return None
+
+
+def _get_ffmpeg_path() -> str | None:
+    for base in ("/opt/homebrew/bin", "/usr/local/bin"):
+        ffmpeg = os.path.join(base, "ffmpeg")
+        if os.path.isfile(ffmpeg) or os.path.isfile(ffmpeg + ".exe"):
+            return base
+    return None
+
+
+def _get_js_runtime_path() -> dict | None:
+    for runtime, exe in (("node", "node"), ("deno", "deno")):
+        path = shutil.which(exe)
+        if not path:
+            for base in ("/opt/homebrew/bin", "/usr/local/bin"):
+                candidate = os.path.join(base, exe)
+                if os.path.isfile(candidate):
+                    path = candidate
+                    break
+        if path:
+            return {runtime: {"path": path}}
+    return None
+
+
+def _generate_transcript_with_whisper(video_id: str) -> str | None:
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    try:
+        import yt_dlp
+
+        ffmpeg_dir = _get_ffmpeg_path()
+        if not ffmpeg_dir:
+            return None
+        os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+
+        js_runtime = _get_js_runtime_path()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = os.path.join(tmpdir, "audio.%(ext)s")
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "outtmpl": out_path,
+                "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "m4a"}],
+                "quiet": True,
+                "ffmpeg_location": ffmpeg_dir,
+            }
+            if js_runtime:
+                ydl_opts["js_runtimes"] = js_runtime
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+
+            m4a_path = os.path.join(tmpdir, "audio.m4a")
+            if not os.path.exists(m4a_path):
+                return None
+
+            import whisper
+            model = whisper.load_model("base")
+            result = model.transcribe(m4a_path, language="ko", fp16=False)
+            text = (result.get("text") or "").strip()[:8000]
+            return text if text else None
+    except Exception:
+        return None
+
+
+def get_transcript(video_id: str) -> str | None:
+    text = _get_youtube_transcript(video_id)
+    if text:
+        return text
+    print(f"    📝 자막 없음 → Whisper 자동 생성 시도...")
+    return _generate_transcript_with_whisper(video_id)
 
 
 # ────────────────────────────────────────────────
 # 3) Claude 요약
 # ────────────────────────────────────────────────
 def summarize_with_claude(video_info: dict, transcript: str) -> dict:
-    content        = transcript if transcript else f"제목: {video_info['title']}\n설명: {video_info['description']}"
-    has_transcript = transcript is not None
-
     prompt = f"""다음은 유튜브 채널 [{video_info['channel']}]의 영상입니다.
 
 제목: {video_info['title']}
 날짜: {video_info['published']}
 URL: {video_info['url']}
 
-{"자막 내용:" if has_transcript else "영상 설명 (자막 없음):"}
-{content}
+자막 내용:
+{transcript}
 
 투자자 관점에서 아래 JSON 형식으로만 요약하세요.
 JSON 외 다른 텍스트 없이 순수 JSON만 출력하세요.
 
+[지시사항]
+- key_topics: 핵심 주제를 3~4줄로 자세히 서술. 영상에서 다룬 주요 논점·배경·결론을 구체적으로 설명.
+
 {{
-  "key_topics": ["핵심 주제 1", "핵심 주제 2", "핵심 주제 3"],
+  "key_topics": "3~4줄로 핵심 주제를 자세히 설명한 문단",
   "market_view": "시장 전반 전망 요약 (2-3문장)",
   "stock_mentions": [
     {{
@@ -178,25 +244,23 @@ JSON 외 다른 텍스트 없이 순수 JSON만 출력하세요.
     try:
         message = claude_client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=1500,
+            max_tokens=3000,
             messages=[{"role": "user", "content": prompt}],
         )
         text   = message.content[0].text.strip()
         text   = text.replace("```json", "").replace("```", "").strip()
         result = json.loads(text)
-        result["has_transcript"] = has_transcript
         return result
     except Exception as e:
         print(f"    ❌ Claude 요약 오류: {e}")
         return {
             "one_line_summary":  "요약 실패",
             "market_view":       "",
-            "key_topics":        [],
+            "key_topics":        "",
             "stock_mentions":    [],
             "macro_points":      "",
             "action_items":      [],
             "overall_sentiment": "중립",
-            "has_transcript":    False,
         }
 
 
@@ -219,9 +283,11 @@ def format_youtube_message(video_info: dict, summary: dict) -> str:
         summary.get("one_line_summary", ""),
     ]
 
-    topics = summary.get("key_topics", [])
+    topics = summary.get("key_topics", "")
     if topics:
-        lines += [f"\n🏷 *핵심 주제*", " | ".join(topics)]
+        if isinstance(topics, list):
+            topics = "\n".join(topics)
+        lines += [f"\n🏷 *핵심 주제*", topics]
 
     if summary.get("market_view"):
         lines += [f"\n📊 *시장 전망*", summary["market_view"]]
@@ -289,9 +355,11 @@ def run_youtube_summary():
         print(f"  📝 자막 추출 중...")
         transcript = get_transcript(video_info["video_id"])
 
-        if transcript:
-            print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
+        if not transcript:
+            print(f"  ⏭ 자막 추출 불가 → 요약 생략 (건너뜀)")
+            continue
 
+        print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
         print(f"  🤖 Claude 요약 중...")
         summary = summarize_with_claude(video_info, transcript)
 
