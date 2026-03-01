@@ -1,4 +1,6 @@
 import os
+import shutil
+import tempfile
 import time
 import json
 from datetime import datetime
@@ -115,9 +117,9 @@ def get_latest_video(channel_name: str, channel_id: str, keyword: str = None) ->
 
 
 # ────────────────────────────────────────────────
-# 2) 자막 추출
+# 2) 자막 추출 (유튜브 자막 → 없으면 Whisper 자동생성)
 # ────────────────────────────────────────────────
-def get_transcript(video_id: str) -> str | None:
+def _get_youtube_transcript(video_id: str) -> str | None:
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
         from youtube_transcript_api._errors import NoTranscriptFound
@@ -125,17 +127,81 @@ def get_transcript(video_id: str) -> str | None:
         try:
             transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko"])
         except NoTranscriptFound:
-            try:
-                transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-                transcript = transcript_list.find_generated_transcript(["ko", "en"]).fetch()
-            except Exception:
-                return None
-
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript = transcript_list.find_generated_transcript(["ko", "en"]).fetch()
         full_text = " ".join([t["text"] for t in transcript])
         return full_text[:8000]
-
     except Exception:
         return None
+
+
+def _get_ffmpeg_path() -> str | None:
+    for base in ("/opt/homebrew/bin", "/usr/local/bin"):
+        ffmpeg = os.path.join(base, "ffmpeg")
+        if os.path.isfile(ffmpeg) or os.path.isfile(ffmpeg + ".exe"):
+            return base
+    return None
+
+
+def _get_js_runtime_path() -> dict | None:
+    for runtime, exe in (("node", "node"), ("deno", "deno")):
+        path = shutil.which(exe)
+        if not path:
+            for base in ("/opt/homebrew/bin", "/usr/local/bin"):
+                candidate = os.path.join(base, exe)
+                if os.path.isfile(candidate):
+                    path = candidate
+                    break
+        if path:
+            return {runtime: {"path": path}}
+    return None
+
+
+def _generate_transcript_with_whisper(video_id: str) -> str | None:
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    try:
+        import yt_dlp
+
+        ffmpeg_dir = _get_ffmpeg_path()
+        if not ffmpeg_dir:
+            return None
+        os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+
+        js_runtime = _get_js_runtime_path()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = os.path.join(tmpdir, "audio.%(ext)s")
+            ydl_opts = {
+                "format": "bestaudio/best",
+                "outtmpl": out_path,
+                "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "m4a"}],
+                "quiet": True,
+                "ffmpeg_location": ffmpeg_dir,
+            }
+            if js_runtime:
+                ydl_opts["js_runtimes"] = js_runtime
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+
+            m4a_path = os.path.join(tmpdir, "audio.m4a")
+            if not os.path.exists(m4a_path):
+                return None
+
+            import whisper
+            model = whisper.load_model("base")
+            result = model.transcribe(m4a_path, language="ko", fp16=False)
+            text = (result.get("text") or "").strip()[:8000]
+            return text if text else None
+    except Exception:
+        return None
+
+
+def get_transcript(video_id: str) -> str | None:
+    text = _get_youtube_transcript(video_id)
+    if text:
+        return text
+    print(f"    📝 자막 없음 → Whisper 자동 생성 시도...")
+    return _generate_transcript_with_whisper(video_id)
 
 
 # ────────────────────────────────────────────────
@@ -287,14 +353,24 @@ def run_youtube_summary():
         print(f"  📝 자막 추출 중...")
         transcript = get_transcript(video_info["video_id"])
 
-        if transcript:
+        if not transcript:
+            print(f"  ⏭ 자막 추출 불가 (자막 제공 안 하는 영상)")
+            msg = (
+                f"🎬 *{video_info['channel']}* | 🔍 {video_info['keyword']}\n"
+                f"📹 {video_info['title']}\n"
+                f"📅 {video_info['published']}\n"
+                f"🔗 {video_info['url']}\n"
+                "─────────────────────\n"
+                "⚠️ *자막 제공 안 하는 영상입니다*"
+            )
+            print(msg)
+        else:
             print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
+            print(f"  🤖 Claude 요약 중...")
+            summary = summarize_with_claude(video_info, transcript)
+            msg = format_youtube_message(video_info, summary)
+            print(msg)
 
-        print(f"  🤖 Claude 요약 중...")
-        summary = summarize_with_claude(video_info, transcript)
-
-        msg = format_youtube_message(video_info, summary)
-        print(msg)
         if send_telegram(msg):
             processed_ids.add(video_info["video_id"])
             _save_processed_id(video_info["video_id"], processed_ids)
