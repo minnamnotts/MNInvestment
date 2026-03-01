@@ -52,7 +52,7 @@ jobs:
           ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
           NEWSAPI_KEY:         ${{ secrets.NEWSAPI_KEY }}
           TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHANNEL_ID }}
         run: python macro_news_bot.py
 
   # ─────────────────────────────────────────────
@@ -81,7 +81,7 @@ jobs:
           ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
           YOUTUBE_API_KEY:     ${{ secrets.YOUTUBE_API_KEY }}
           TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHANNEL_ID }}
         run: python youtube_summary_bot.py
 
   # ─────────────────────────────────────────────
@@ -110,5 +110,5 @@ jobs:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           YOUTUBE_API_KEY:    ${{ secrets.YOUTUBE_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_JIHA_ID:   ${{ secrets.TELEGRAM_JIHA_ID }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_JIHA_ID }}
         run: python "YouTube for Jiha.py"
