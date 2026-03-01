@@ -134,6 +134,9 @@ jobs:
       - name: 패키지 설치
         run: pip install anthropic requests youtube-transcript-api python-dotenv yt-dlp openai-whisper
 
+      - name: ffmpeg 설치
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: 처리 파일 초기화
         run: '[ -f youtube_summary_processed.json ] || echo "[]" > youtube_summary_processed.json'
 
