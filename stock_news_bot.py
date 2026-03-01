@@ -13,8 +13,8 @@ load_dotenv(os.path.expanduser("~/.env"))
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 NEWSAPI_KEY       = os.environ.get("NEWSAPI_KEY")
-TELEGRAM_TOKEN    = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID  = os.environ.get("TELEGRAM_CHAT_ID")
+TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHANNEL_ID")
 
 if not all([ANTHROPIC_API_KEY, NEWSAPI_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
     missing = [k for k, v in {

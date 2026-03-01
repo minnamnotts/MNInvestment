@@ -14,15 +14,15 @@ load_dotenv(os.path.expanduser("~/.env"))
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 YOUTUBE_API_KEY   = os.environ.get("YOUTUBE_API_KEY")
-TELEGRAM_TOKEN      = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
+TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHANNEL_ID")
 
-if not all([ANTHROPIC_API_KEY, YOUTUBE_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHANNEL_ID]):
+if not all([ANTHROPIC_API_KEY, YOUTUBE_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
     missing = [k for k, v in {
         "ANTHROPIC_API_KEY":  ANTHROPIC_API_KEY,
         "YOUTUBE_API_KEY":    YOUTUBE_API_KEY,
         "TELEGRAM_BOT_TOKEN": TELEGRAM_TOKEN,
-        "TELEGRAM_CHANNEL_ID": TELEGRAM_CHANNEL_ID,
+        "TELEGRAM_CHAT_ID": TELEGRAM_CHAT_ID,
     }.items() if not v]
     print(f"❌ 누락된 환경변수: {', '.join(missing)}")
     exit(1)
@@ -249,7 +249,7 @@ def send_telegram(message: str) -> bool:
     try:
         url     = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         payload = {
-            "chat_id":    TELEGRAM_CHANNEL_ID,
+            "chat_id":    TELEGRAM_CHAT_ID,
             "text":       message,
             "parse_mode": "Markdown",
             "disable_web_page_preview": True,
