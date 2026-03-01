@@ -356,23 +356,14 @@ def run_youtube_summary():
         transcript = get_transcript(video_info["video_id"])
 
         if not transcript:
-            print(f"  ⏭ 자막 추출 불가 (자막 제공 안 하는 영상)")
-            msg = (
-                f"🎬 *{video_info['channel']}* | 🔍 {video_info['keyword']}\n"
-                f"📹 {video_info['title']}\n"
-                f"📅 {video_info['published']}\n"
-                f"🔗 {video_info['url']}\n"
-                "─────────────────────\n"
-                "⚠️ *자막 제공 안 하는 영상입니다*"
-            )
-            print(msg)
-        else:
-            print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
-            print(f"  🤖 Claude 요약 중...")
-            summary = summarize_with_claude(video_info, transcript)
-            msg = format_youtube_message(video_info, summary)
-            print(msg)
+            print(f"  ⏭ 자막 추출 불가 → 요약 생략 (건너뜀)")
+            continue
 
+        print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
+        print(f"  🤖 Claude 요약 중...")
+        summary = summarize_with_claude(video_info, transcript)
+        msg = format_youtube_message(video_info, summary)
+        print(msg)
         if send_telegram(msg):
             processed_ids.add(video_info["video_id"])
             _save_processed_id(video_info["video_id"], processed_ids)
