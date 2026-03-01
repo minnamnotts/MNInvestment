@@ -271,9 +271,6 @@ def send_telegram(message: str) -> bool:
 # ────────────────────────────────────────────────
 def run_youtube_summary():
     today = datetime.now()
-    if today.weekday() == 6:  # 일요일(0=월 ~ 6=일)
-        print("🎬 일요일은 유튜브 서머리를 생성하지 않음")
-        return
     now = today.strftime("%Y-%m-%d %H:%M")
     print(f"🎬 유튜브 서머리 시작 ({now})")
 
