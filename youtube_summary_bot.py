@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -70,25 +71,36 @@ CHANNELS = {
 
 
 # ────────────────────────────────────────────────
-# 1) 영상 가져오기
+# 1) 영상 가져오기 (30분 이하만 분석)
 # ────────────────────────────────────────────────
+_MAX_DURATION_MIN = 40  # 40분 초과 시 스킵
+
+
+def _parse_duration_iso8601(duration: str) -> float:
+    """PT1H30M15S → 분 단위로 변환"""
+    match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration or "")
+    if not match:
+        return 0
+    h, m, s = (int(g) if g else 0 for g in match.groups())
+    return h * 60 + m + s / 60
+
+
 def get_latest_video(channel_name: str, channel_id: str, keyword: str = None) -> dict | None:
     try:
-        url = "https://www.googleapis.com/youtube/v3/search"
-        params = {
+        search_url = "https://www.googleapis.com/youtube/v3/search"
+        search_params = {
             "key":        YOUTUBE_API_KEY,
             "channelId":  channel_id,
             "part":       "snippet",
             "order":      "date",
-            "maxResults": 1,
+            "maxResults": 15,
             "type":       "video",
         }
         if keyword:
-            params["q"] = keyword
+            search_params["q"] = keyword
 
-        r    = requests.get(url, params=params, timeout=10)
+        r    = requests.get(search_url, params=search_params, timeout=10)
         data = r.json()
-
         if "error" in data:
             print(f"    ❌ YouTube API 오류: {data['error'].get('message', '')}")
             return None
@@ -98,19 +110,38 @@ def get_latest_video(channel_name: str, channel_id: str, keyword: str = None) ->
             print(f"    ⚠️  {channel_name}: 영상 없음 (키워드: {keyword})")
             return None
 
-        item     = items[0]
-        video_id = item["id"]["videoId"]
-        snippet  = item["snippet"]
+        video_ids = [it["id"]["videoId"] for it in items]
+        vurl      = "https://www.googleapis.com/youtube/v3/videos"
+        vparams   = {"key": YOUTUBE_API_KEY, "part": "contentDetails", "id": ",".join(video_ids)}
+        vr        = requests.get(vurl, params=vparams, timeout=10)
+        vdata     = vr.json()
 
-        return {
-            "video_id":    video_id,
-            "title":       snippet.get("title", ""),
-            "description": snippet.get("description", "")[:300],
-            "published":   snippet.get("publishedAt", "")[:10],
-            "url":         f"https://www.youtube.com/watch?v={video_id}",
-            "channel":     channel_name,
-            "keyword":     keyword or "최신",
-        }
+        if "error" in vdata:
+            print(f"    ❌ YouTube API 오류: {vdata['error'].get('message', '')}")
+            return None
+
+        by_id = {x["id"]: x.get("contentDetails", {}).get("duration", "PT0S") for x in vdata.get("items", [])}
+        items_by_id = {it["id"]["videoId"]: it for it in items}
+
+        for vid in video_ids:
+            dur_min = _parse_duration_iso8601(by_id.get(vid, "PT0S"))
+            if dur_min > _MAX_DURATION_MIN:
+                print(f"    ⏭ {vid[:8]}... 영상 길이 {dur_min:.0f}분 (>{_MAX_DURATION_MIN}분) → 스킵")
+                continue
+            item    = items_by_id[vid]
+            snippet = item["snippet"]
+            return {
+                "video_id":    vid,
+                "title":       snippet.get("title", ""),
+                "description": snippet.get("description", "")[:300],
+                "published":   snippet.get("publishedAt", "")[:10],
+                "url":         f"https://www.youtube.com/watch?v={vid}",
+                "channel":     channel_name,
+                "keyword":     keyword or "최신",
+            }
+
+        print(f"    ⚠️  {channel_name}: {_MAX_DURATION_MIN}분 이하 영상 없음")
+        return None
     except Exception as e:
         print(f"    ❌ YouTube API 오류 ({channel_name}): {e}")
         return None
