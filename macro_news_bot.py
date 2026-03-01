@@ -319,13 +319,6 @@ def format_macro_message(category_key: str, analysis: dict) -> str:
 # 메인 실행
 # ────────────────────────────────────────────────
 def run_macro_news():
-    print("🌍 매크로 뉴스 브리핑 시작")
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    # 시작 알림
-    send_telegram(f"🌍 *매크로 뉴스*\n🕐 {now}\n곧 3개 카테고리 결과 보낼 예정임.")
-    time.sleep(1)
-
     for category_key in MACRO_QUERIES.keys():
         label = MACRO_QUERIES[category_key]["label"]
         print(f"\n{'='*60}")
@@ -340,9 +333,6 @@ def run_macro_news():
         print(msg)
         send_telegram(msg)
         time.sleep(3)
-
-    send_telegram(f"✅ *매크로 브리핑 완료*\n🕐 {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print("\n✅ 매크로 뉴스 브리핑 완료")
 
 
 if __name__ == "__main__":

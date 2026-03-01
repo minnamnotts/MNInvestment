@@ -51,20 +51,18 @@ def _save_processed_id(video_id: str, current: set) -> None:
 
 
 # ────────────────────────────────────────────────
-# 채널 설정 (최신 영상 기준)
+# 채널 설정 (최신 영상 기준, keyword 있으면 채널 내 검색)
 # ────────────────────────────────────────────────
 CHANNELS = {
-    "소수몽키": {
-        "id": "UCC3yfxS5qC6PCwDzetUuEWg",
+    "증시각도기TV": {
+        "id": "UCdOjVxkj5JA0iDu3_xcsTyQ",
     },
-    "서재형의 투자교실": {
-        "id": "UCtmKBFeri9hx9DOaVSSvvvw",
+    "삼프로TV": {
+        "id": "UChlv4GSd7OQl3js-jkLOnFA",
     },
-    "경제사냥꾼": {
-        "id": "UC7usMJDHmtbs_oegmzQKKMA",
-    },
-    "올랜도킴": {
-        "id": "UCwSSqi-s0wcH6pJbH3YPZqQ",
+    "한경_빈난새개장전": {
+        "id": "UCWskYkV4c4S9D__rsfOl2JA",
+        "keyword": "빈난새의 개장전 요것만",
     },
 }
 
@@ -270,13 +268,6 @@ def send_telegram(message: str) -> bool:
 # 메인 실행
 # ────────────────────────────────────────────────
 def run_youtube_summary():
-    today = datetime.now()
-    now = today.strftime("%Y-%m-%d %H:%M")
-    print(f"🎬 유튜브 서머리 시작 ({now})")
-
-    send_telegram(f"🎬 *유튜브 브리핑 시작*\n채널: {', '.join(CHANNELS.keys())}\n🕐 {now}")
-    time.sleep(1)
-
     processed_ids = _load_processed_ids()
 
     for channel_name, config in CHANNELS.items():
@@ -308,9 +299,6 @@ def run_youtube_summary():
             processed_ids.add(video_info["video_id"])
             _save_processed_id(video_info["video_id"], processed_ids)
         time.sleep(3)
-
-    send_telegram(f"✅ *유튜브 브리핑 완료*\n🕐 {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print("\n✅ 유튜브 서머리 완료")
 
 
 if __name__ == "__main__":
