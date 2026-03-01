@@ -49,11 +49,14 @@ jobs:
 
       - name: 실행
         env:
-          ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
-          NEWSAPI_KEY:         ${{ secrets.NEWSAPI_KEY }}
-          TELEGRAM_BOT_TOKEN:  ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+          NEWSAPI_KEY:        ${{ secrets.NEWSAPI_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHANNEL_ID }}
-        run: python macro_news_bot.py
+        run: |
+          echo "CHAT_ID 길이: ${#TELEGRAM_CHAT_ID}"
+          echo "TOKEN 길이: ${#TELEGRAM_BOT_TOKEN}"
+          python macro_news_bot.py
 
   # ─────────────────────────────────────────────
   # 2) 유튜브 서머리 → MN Investment 채널
@@ -103,7 +106,7 @@ jobs:
           python-version: '3.12'
 
       - name: 패키지 설치
-        run: pip install anthropic requests youtube-transcript-api python-dotenv
+        run: pip install anthropic requests youtube-transcript-api python-dotenv yt-dlp openai-whisper
 
       - name: 실행
         env:
