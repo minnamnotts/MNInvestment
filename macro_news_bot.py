@@ -73,13 +73,13 @@ MACRO_QUERIES = {
 # ────────────────────────────────────────────────
 # 뉴스 수집
 # ────────────────────────────────────────────────
-def fetch_newsapi(query: str, days: int = 3) -> list:
+def fetch_newsapi(query: str, hours: int = 24) -> list:
     try:
-        from_date = (datetime.today() - timedelta(days=days)).strftime("%Y-%m-%d")
+        from_dt = (datetime.utcnow() - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
         url = "https://newsapi.org/v2/everything"
         params = {
             "q":        query,
-            "from":     from_date,
+            "from":     from_dt,
             "sortBy":   "relevancy",
             "language": "en",
             "pageSize": 8,
@@ -103,43 +103,57 @@ def fetch_newsapi(query: str, days: int = 3) -> list:
         return []
 
 
-def fetch_google_news_rss(query: str) -> list:
+def fetch_google_news_rss(query: str, max_age_hours: int = 24) -> list:
     try:
         import feedparser
+        from time import mktime
+        cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
         encoded = requests.utils.quote(query)
         url = f"https://news.google.com/rss/search?q={encoded}&hl=ko&gl=KR&ceid=KR:ko"
         feed = feedparser.parse(url)
-        return [
-            {
+        results = []
+        for e in feed.entries[:8]:
+            pub = getattr(e, "published_parsed", None)
+            if pub:
+                pub_dt = datetime.utcfromtimestamp(mktime(pub))
+                if pub_dt < cutoff:
+                    continue
+            results.append({
                 "title":   e.get("title", ""),
                 "summary": e.get("summary", "")[:200],
                 "url":     e.get("link", ""),
                 "source":  "Google News",
                 "date":    e.get("published", "")[:10],
-            }
-            for e in feed.entries[:8]
-        ]
+            })
+        return results
     except Exception as e:
         print(f"    Google RSS 오류: {e}")
         return []
 
 
-def fetch_naver_rss(query: str) -> list:
+def fetch_naver_rss(query: str, max_age_hours: int = 24) -> list:
     try:
         import feedparser
+        from time import mktime
+        cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
         encoded = requests.utils.quote(query)
         url = f"https://search.naver.com/rss?where=news&query={encoded}&field=1"
         feed = feedparser.parse(url)
-        return [
-            {
+        results = []
+        for e in feed.entries[:8]:
+            pub = getattr(e, "published_parsed", None)
+            if pub:
+                pub_dt = datetime.utcfromtimestamp(mktime(pub))
+                if pub_dt < cutoff:
+                    continue
+            results.append({
                 "title":   e.get("title", "").replace("<b>", "").replace("</b>", ""),
                 "summary": e.get("summary", "").replace("<b>", "").replace("</b>", "")[:200],
                 "url":     e.get("link", ""),
                 "source":  "네이버뉴스",
                 "date":    e.get("published", "")[:10],
-            }
-            for e in feed.entries[:8]
-        ]
+            })
+        return results
     except Exception as e:
         print(f"    네이버 RSS 오류: {e}")
         return []
