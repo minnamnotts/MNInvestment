@@ -68,14 +68,14 @@ MACRO_QUERIES = {
         "queries_ko": ["실적발표 2026", "바이오 학회 임상", "FOMC 일정", "CPI GDP 발표"],
     },
     "war_safehaven": {
-        "label": "⚔️ 전쟁 & 안전자산",
+        "label": "⚔️ Special Topic: 이란 전쟁 & 안전자산 동향",
         "queries_en": [
-            "war conflict military escalation 2026",
+            "Iran war conflict military escalation 2026",
             "safe haven gold price rally",
             "US Treasury bond yield safe haven",
             "geopolitical risk gold oil",
         ],
-        "queries_ko": ["전쟁 위기", "안전자산 금", "금 가격", "국채 금리 전쟁"],
+        "queries_ko": ["이란 전쟁", "안전자산", "금", "금 가격", "국채 금리", "전쟁"],
     },
 }
 
