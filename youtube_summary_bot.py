@@ -59,13 +59,16 @@ def _save_processed_id(video_id: str, current: set) -> None:
 CHANNELS = {
     "증시각도기TV": {
         "id": "UCdOjVxkj5JA0iDu3_xcsTyQ",
+        "title_filter": "시황",
     },
     "삼프로TV": {
         "id": "UChlv4GSd7OQl3js-jkLOnFA",
+        "title_filter": "시황",
     },
     "한경_빈난새개장전": {
         "id": "UCWskYkV4c4S9D__rsfOl2JA",
         "keyword": "빈난새의 개장전 요것만",
+        "title_filter": "시황",
     },
 }
 
@@ -85,7 +88,7 @@ def _parse_duration_iso8601(duration: str) -> float:
     return h * 60 + m + s / 60
 
 
-def get_latest_video(channel_name: str, channel_id: str, keyword: str = None) -> dict | None:
+def get_latest_video(channel_name: str, channel_id: str, keyword: str = None, title_filter: str = None) -> dict | None:
     try:
         search_url = "https://www.googleapis.com/youtube/v3/search"
         search_params = {
@@ -124,12 +127,16 @@ def get_latest_video(channel_name: str, channel_id: str, keyword: str = None) ->
         items_by_id = {it["id"]["videoId"]: it for it in items}
 
         for vid in video_ids:
+            item = items_by_id[vid]
+            snippet = item["snippet"]
+            title = snippet.get("title", "")
+            if title_filter and title_filter not in title:
+                print(f"    ⏭ {vid[:8]}... 제목에 '{title_filter}' 없음 → 스킵")
+                continue
             dur_min = _parse_duration_iso8601(by_id.get(vid, "PT0S"))
             if dur_min > _MAX_DURATION_MIN:
                 print(f"    ⏭ {vid[:8]}... 영상 길이 {dur_min:.0f}분 (>{_MAX_DURATION_MIN}분) → 스킵")
                 continue
-            item    = items_by_id[vid]
-            snippet = item["snippet"]
             return {
                 "video_id":    vid,
                 "title":       snippet.get("title", ""),
@@ -140,7 +147,8 @@ def get_latest_video(channel_name: str, channel_id: str, keyword: str = None) ->
                 "keyword":     keyword or "최신",
             }
 
-        print(f"    ⚠️  {channel_name}: {_MAX_DURATION_MIN}분 이하 영상 없음")
+        filter_msg = f" (제목에 '{title_filter}' 포함)" if title_filter else ""
+        print(f"    ⚠️  {channel_name}: 조건에 맞는 영상 없음{filter_msg}")
         return None
     except Exception as e:
         print(f"    ❌ YouTube API 오류 ({channel_name}): {e}")
@@ -397,7 +405,11 @@ def run_youtube_summary():
         print(f"📺 {channel_name} | 키워드: {config.get('keyword', '최신')}")
         print("=" * 60)
 
-        video_info = get_latest_video(channel_name, config["id"], config.get("keyword"))
+        video_info = get_latest_video(
+            channel_name, config["id"],
+            keyword=config.get("keyword"),
+            title_filter=config.get("title_filter"),
+        )
         if not video_info:
             continue
 
