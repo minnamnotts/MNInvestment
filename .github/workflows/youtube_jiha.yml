@@ -1,0 +1,49 @@
+name: 유튜브 for Jiha
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # 매일 08:00 SGT = 00:00 UTC
+  workflow_dispatch:
+
+jobs:
+  youtube_jiha:
+    name: 유튜브 for Jiha
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 캐시 복원 (처리된 영상 ID)
+        uses: actions/cache/restore@v4
+        with:
+          path: youtube_summary_processed.json
+          key: youtube-processed-${{ github.run_id }}
+          restore-keys: |
+            youtube-processed-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 패키지 설치
+        run: pip install anthropic requests youtube-transcript-api python-dotenv yt-dlp openai-whisper
+
+      - name: ffmpeg 설치
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: 처리 파일 초기화
+        run: '[ -f youtube_summary_processed.json ] || echo "[]" > youtube_summary_processed.json'
+
+      - name: 실행
+        env:
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+          YOUTUBE_API_KEY:    ${{ secrets.YOUTUBE_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_JIHA_ID }}
+        run: python "YouTube for Jiha.py"
+
+      - name: 캐시 저장 (처리된 영상 ID)
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: youtube_summary_processed.json
+          key: youtube-processed-${{ github.run_id }}

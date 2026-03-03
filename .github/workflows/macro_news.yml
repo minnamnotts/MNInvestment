@@ -1,0 +1,28 @@
+name: 매크로 뉴스 브리핑
+
+on:
+  schedule:
+    - cron: '0 23 * * *'   # 매일 07:00 SGT = 23:00 UTC (전날)
+  workflow_dispatch:
+
+jobs:
+  macro_news:
+    name: 매크로 뉴스 브리핑
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 패키지 설치
+        run: pip install anthropic requests feedparser python-dotenv
+
+      - name: 실행
+        env:
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+          NEWSAPI_KEY:        ${{ secrets.NEWSAPI_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHANNEL_ID }}
+        run: python macro_news_bot.py
