@@ -73,9 +73,9 @@ CHANNELS = {
 
 
 # ────────────────────────────────────────────────
-# 1) 영상 가져오기 (30분 이하만 분석)
+# 1) 영상 가져오기
 # ────────────────────────────────────────────────
-_MAX_DURATION_MIN = 40  # 40분 초과 시 스킵
+_MAX_DURATION_MIN = 9999  # 제한 없음 (과거 40분 제한 제거)
 
 
 def _parse_duration_iso8601(duration: str) -> float:
@@ -155,15 +155,40 @@ def get_latest_video(channel_name: str, channel_id: str, keyword: str = None) ->
 def _get_youtube_transcript(video_id: str) -> str | None:
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
-        from youtube_transcript_api._errors import NoTranscriptFound
+        from youtube_transcript_api._errors import NoTranscriptFound, TranscriptsDisabled
 
+        # 0) 언어 무관, 사용 가능한 자막 아무거나
         try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=["ko"])
-        except NoTranscriptFound:
+            transcript = YouTubeTranscriptApi.get_transcript(video_id)
+            full_text = " ".join([t["text"] for t in transcript])
+            if full_text.strip():
+                return full_text[:8000]
+        except (NoTranscriptFound, TranscriptsDisabled):
+            pass
+
+        # 1) ko → en 순으로 수동/자동 자막 시도
+        for lang in ["ko", "en", "ko-KR", "en-US"]:
+            try:
+                transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=[lang])
+                full_text = " ".join([t["text"] for t in transcript])
+                return full_text[:8000] if full_text.strip() else None
+            except (NoTranscriptFound, TranscriptsDisabled):
+                continue
+
+        # 2) list_transcripts로 사용 가능한 자막 중 아무거나 시도
+        try:
             transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-            transcript = transcript_list.find_generated_transcript(["ko", "en"]).fetch()
-        full_text = " ".join([t["text"] for t in transcript])
-        return full_text[:8000]
+            for t in transcript_list:
+                try:
+                    transcript = t.fetch()
+                    full_text = " ".join([x["text"] for x in transcript])
+                    if full_text.strip():
+                        return full_text[:8000]
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return None
     except Exception:
         return None
 
@@ -240,15 +265,17 @@ def get_transcript(video_id: str) -> str | None:
 # ────────────────────────────────────────────────
 # 3) Claude 요약
 # ────────────────────────────────────────────────
-def summarize_with_claude(video_info: dict, transcript: str) -> dict:
+def summarize_with_claude(video_info: dict, transcript: str | None) -> dict:
+    content = transcript if transcript else f"제목: {video_info['title']}\n설명: {video_info['description']}"
+    label = "자막 내용:" if transcript else "영상 설명 (자막 없음):"
     prompt = f"""다음은 유튜브 채널 [{video_info['channel']}]의 영상입니다.
 
 제목: {video_info['title']}
 날짜: {video_info['published']}
 URL: {video_info['url']}
 
-자막 내용:
-{transcript}
+{label}
+{content}
 
 투자자 관점에서 아래 JSON 형식으로만 요약하세요.
 JSON 외 다른 텍스트 없이 순수 JSON만 출력하세요.
@@ -386,11 +413,10 @@ def run_youtube_summary():
         print(f"  📝 자막 추출 중...")
         transcript = get_transcript(video_info["video_id"])
 
-        if not transcript:
-            print(f"  ⏭ 자막 추출 불가 → 요약 생략 (건너뜀)")
-            continue
-
-        print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
+        if transcript:
+            print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
+        else:
+            print(f"  ⚠️  자막 없음 → 제목+설명으로 요약 시도")
         print(f"  🤖 Claude 요약 중...")
         summary = summarize_with_claude(video_info, transcript)
         msg = format_youtube_message(video_info, summary)
