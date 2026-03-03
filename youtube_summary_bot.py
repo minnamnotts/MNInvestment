@@ -59,16 +59,13 @@ def _save_processed_id(video_id: str, current: set) -> None:
 CHANNELS = {
     "증시각도기TV": {
         "id": "UCdOjVxkj5JA0iDu3_xcsTyQ",
-        "title_filter": "시황",
     },
     "삼프로TV": {
         "id": "UChlv4GSd7OQl3js-jkLOnFA",
-        "title_filter": "시황",
     },
     "한경_빈난새개장전": {
         "id": "UCWskYkV4c4S9D__rsfOl2JA",
         "keyword": "빈난새의 개장전 요것만",
-        "title_filter": "시황",
     },
 }
 
@@ -88,7 +85,7 @@ def _parse_duration_iso8601(duration: str) -> float:
     return h * 60 + m + s / 60
 
 
-def get_latest_video(channel_name: str, channel_id: str, keyword: str = None, title_filter: str = None) -> dict | None:
+def get_latest_video(channel_name: str, channel_id: str, keyword: str = None) -> dict | None:
     try:
         search_url = "https://www.googleapis.com/youtube/v3/search"
         search_params = {
@@ -127,16 +124,12 @@ def get_latest_video(channel_name: str, channel_id: str, keyword: str = None, ti
         items_by_id = {it["id"]["videoId"]: it for it in items}
 
         for vid in video_ids:
-            item = items_by_id[vid]
-            snippet = item["snippet"]
-            title = snippet.get("title", "")
-            if title_filter and title_filter not in title:
-                print(f"    ⏭ {vid[:8]}... 제목에 '{title_filter}' 없음 → 스킵")
-                continue
             dur_min = _parse_duration_iso8601(by_id.get(vid, "PT0S"))
             if dur_min > _MAX_DURATION_MIN:
                 print(f"    ⏭ {vid[:8]}... 영상 길이 {dur_min:.0f}분 (>{_MAX_DURATION_MIN}분) → 스킵")
                 continue
+            item = items_by_id[vid]
+            snippet = item["snippet"]
             return {
                 "video_id":    vid,
                 "title":       snippet.get("title", ""),
@@ -147,8 +140,7 @@ def get_latest_video(channel_name: str, channel_id: str, keyword: str = None, ti
                 "keyword":     keyword or "최신",
             }
 
-        filter_msg = f" (제목에 '{title_filter}' 포함)" if title_filter else ""
-        print(f"    ⚠️  {channel_name}: 조건에 맞는 영상 없음{filter_msg}")
+        print(f"    ⚠️  {channel_name}: {_MAX_DURATION_MIN}분 이하 영상 없음")
         return None
     except Exception as e:
         print(f"    ❌ YouTube API 오류 ({channel_name}): {e}")
@@ -260,11 +252,48 @@ def _generate_transcript_with_whisper(video_id: str) -> str | None:
         return None
 
 
+def _get_transcript_via_ytdlp(video_id: str) -> str | None:
+    """yt-dlp로 자막 파일 다운로드 (YouTube API 실패 시 보조 수단)"""
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    try:
+        import yt_dlp
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ydl_opts = {
+                "skip_download": True,
+                "writesubtitles": True,
+                "writeautomaticsub": True,
+                "subtitleslangs": ["ko", "en", "ko.*", "en.*"],
+                "outtmpl": os.path.join(tmpdir, "%(id)s"),
+                "quiet": True,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            for f in os.listdir(tmpdir):
+                if f.endswith((".vtt", ".srt")):
+                    path = os.path.join(tmpdir, f)
+                    with open(path, "r", encoding="utf-8", errors="ignore") as fp:
+                        raw = fp.read()
+                    lines = [
+                        ln.strip() for ln in raw.split("\n")
+                        if ln.strip() and not ln.startswith("WEBVTT") and "-->" not in ln and not re.match(r"^\d+$", ln.strip())
+                    ]
+                    text = " ".join(lines).strip()[:8000]
+                    if text:
+                        return text
+        return None
+    except Exception:
+        return None
+
+
 def get_transcript(video_id: str) -> str | None:
     text = _get_youtube_transcript(video_id)
     if text:
         return text
-    print(f"    📝 자막 없음 → Whisper 자동 생성 시도...")
+    print(f"    📝 API 자막 없음 → yt-dlp 자막 다운로드 시도...")
+    text = _get_transcript_via_ytdlp(video_id)
+    if text:
+        return text
+    print(f"    📝 yt-dlp 자막 없음 → Whisper 음성 인식 시도...")
     return _generate_transcript_with_whisper(video_id)
 
 
@@ -272,17 +301,14 @@ def get_transcript(video_id: str) -> str | None:
 # 3) Claude 요약
 # ────────────────────────────────────────────────
 def summarize_with_claude(video_info: dict, transcript: str) -> dict:
-    content        = transcript if transcript else f"제목: {video_info['title']}\n설명: {video_info['description']}"
-    has_transcript = transcript is not None
-
     prompt = f"""다음은 유튜브 채널 [{video_info['channel']}]의 영상입니다.
 
 제목: {video_info['title']}
 날짜: {video_info['published']}
 URL: {video_info['url']}
 
-{"자막 내용:" if has_transcript else "영상 설명 (자막 없음):"}
-{content}
+자막 내용:
+{transcript}
 
 투자자 관점에서 아래 JSON 형식으로만 요약하세요.
 JSON 외 다른 텍스트 없이 순수 JSON만 출력하세요.
@@ -312,7 +338,7 @@ JSON 외 다른 텍스트 없이 순수 JSON만 출력하세요.
         text   = message.content[0].text.strip()
         text   = text.replace("```json", "").replace("```", "").strip()
         result = json.loads(text)
-        result["has_transcript"] = has_transcript
+        result["has_transcript"] = True
         return result
     except Exception as e:
         print(f"    ❌ Claude 요약 오류: {e}")
@@ -405,11 +431,7 @@ def run_youtube_summary():
         print(f"📺 {channel_name} | 키워드: {config.get('keyword', '최신')}")
         print("=" * 60)
 
-        video_info = get_latest_video(
-            channel_name, config["id"],
-            keyword=config.get("keyword"),
-            title_filter=config.get("title_filter"),
-        )
+        video_info = get_latest_video(channel_name, config["id"], config.get("keyword"))
         if not video_info:
             continue
 
@@ -421,10 +443,11 @@ def run_youtube_summary():
         print(f"  📝 자막 추출 중...")
         transcript = get_transcript(video_info["video_id"])
 
-        if transcript:
-            print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
-        else:
-            print(f"  ⚠️  자막 없음 → 제목+설명으로 요약 시도")
+        if not transcript:
+            print(f"  ⏭ 자막 추출 불가 → 영상 스킵")
+            continue
+
+        print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
         print(f"  🤖 Claude 요약 중...")
         summary = summarize_with_claude(video_info, transcript)
         msg = format_youtube_message(video_info, summary)

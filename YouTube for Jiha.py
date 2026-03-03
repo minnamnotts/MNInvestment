@@ -254,28 +254,63 @@ def _generate_transcript_with_whisper(video_id: str) -> str | None:
         return None
 
 
+def _get_transcript_via_ytdlp(video_id: str) -> str | None:
+    """yt-dlp로 자막 파일 다운로드 (YouTube API 실패 시 보조 수단)"""
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    try:
+        import yt_dlp
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ydl_opts = {
+                "skip_download": True,
+                "writesubtitles": True,
+                "writeautomaticsub": True,
+                "subtitleslangs": ["ko", "en", "ko.*", "en.*"],
+                "outtmpl": os.path.join(tmpdir, "%(id)s"),
+                "quiet": True,
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            for f in os.listdir(tmpdir):
+                if f.endswith((".vtt", ".srt")):
+                    path = os.path.join(tmpdir, f)
+                    with open(path, "r", encoding="utf-8", errors="ignore") as fp:
+                        raw = fp.read()
+                    lines = [
+                        ln.strip() for ln in raw.split("\n")
+                        if ln.strip() and not ln.startswith("WEBVTT") and "-->" not in ln and not re.match(r"^\d+$", ln.strip())
+                    ]
+                    text = " ".join(lines).strip()[:8000]
+                    if text:
+                        return text
+        return None
+    except Exception:
+        return None
+
+
 def get_transcript(video_id: str) -> str | None:
     text = _get_youtube_transcript(video_id)
     if text:
         return text
-    print(f"    📝 자막 없음 → Whisper 자동 생성 시도...")
+    print(f"    📝 API 자막 없음 → yt-dlp 자막 다운로드 시도...")
+    text = _get_transcript_via_ytdlp(video_id)
+    if text:
+        return text
+    print(f"    📝 yt-dlp 자막 없음 → Whisper 음성 인식 시도...")
     return _generate_transcript_with_whisper(video_id)
 
 
 # ────────────────────────────────────────────────
 # 3) Claude 요약
 # ────────────────────────────────────────────────
-def summarize_with_claude(video_info: dict, transcript: str | None) -> dict:
-    content = transcript if transcript else f"제목: {video_info['title']}\n설명: {video_info['description']}"
-    label = "자막 내용:" if transcript else "영상 설명 (자막 없음):"
+def summarize_with_claude(video_info: dict, transcript: str) -> dict:
     prompt = f"""다음은 유튜브 채널 [{video_info['channel']}]의 영상입니다.
 
 제목: {video_info['title']}
 날짜: {video_info['published']}
 URL: {video_info['url']}
 
-{label}
-{content}
+자막 내용:
+{transcript}
 
 투자자 관점에서 아래 JSON 형식으로만 요약하세요.
 JSON 외 다른 텍스트 없이 순수 JSON만 출력하세요.
@@ -413,10 +448,11 @@ def run_youtube_summary():
         print(f"  📝 자막 추출 중...")
         transcript = get_transcript(video_info["video_id"])
 
-        if transcript:
-            print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
-        else:
-            print(f"  ⚠️  자막 없음 → 제목+설명으로 요약 시도")
+        if not transcript:
+            print(f"  ⏭ 자막 추출 불가 → 영상 스킵")
+            continue
+
+        print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
         print(f"  🤖 Claude 요약 중...")
         summary = summarize_with_claude(video_info, transcript)
         msg = format_youtube_message(video_info, summary)
