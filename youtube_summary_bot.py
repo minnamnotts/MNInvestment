@@ -18,14 +18,15 @@ load_dotenv(os.path.expanduser("~/.env"))
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 YOUTUBE_API_KEY   = os.environ.get("YOUTUBE_API_KEY")
 TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHANNEL_ID")
+# MN Investment 채널로 발송 (채널 전용, CHAT_ID 사용 안 함)
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
 
 if not all([ANTHROPIC_API_KEY, YOUTUBE_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
     missing = [k for k, v in {
-        "ANTHROPIC_API_KEY":  ANTHROPIC_API_KEY,
-        "YOUTUBE_API_KEY":    YOUTUBE_API_KEY,
-        "TELEGRAM_BOT_TOKEN": TELEGRAM_TOKEN,
-        "TELEGRAM_CHAT_ID": TELEGRAM_CHAT_ID,
+        "ANTHROPIC_API_KEY":    ANTHROPIC_API_KEY,
+        "YOUTUBE_API_KEY":      YOUTUBE_API_KEY,
+        "TELEGRAM_BOT_TOKEN":   TELEGRAM_TOKEN,
+        "TELEGRAM_CHANNEL_ID":  TELEGRAM_CHAT_ID,
     }.items() if not v]
     print(f"❌ 누락된 환경변수: {', '.join(missing)}")
     exit(1)
@@ -34,7 +35,36 @@ claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # 이미 처리한 영상 ID 저장 (중복 발송 방지)
 _PROCESSED_IDS_FILE = os.path.join(_script_dir, "youtube_summary_processed.json")
+_LOCK_FILE = os.path.join(_script_dir, "youtube_summary.lock")
 _MAX_PROCESSED_IDS = 500  # 최대 보관 개수 (오래된 것부터 삭제)
+
+
+def _acquire_lock() -> bool:
+    """한 번에 하나의 인스턴스만 실행되도록 lock. 성공 시 True."""
+    try:
+        if os.path.exists(_LOCK_FILE):
+            try:
+                with open(_LOCK_FILE, "r") as f:
+                    pid = int(f.read().strip())
+                os.kill(pid, 0)
+                print(f"⏭ 다른 인스턴스 실행 중 (PID {pid}) → 종료")
+                return False
+            except (ValueError, ProcessLookupError, OSError):
+                os.remove(_LOCK_FILE)
+        with open(_LOCK_FILE, "w") as f:
+            f.write(str(os.getpid()))
+        return True
+    except Exception as e:
+        print(f"⚠️  Lock 오류: {e}")
+        return True
+
+
+def _release_lock() -> None:
+    try:
+        if os.path.exists(_LOCK_FILE):
+            os.remove(_LOCK_FILE)
+    except Exception:
+        pass
 
 
 def _load_processed_ids() -> set:
@@ -465,4 +495,9 @@ if __name__ == "__main__":
         print("📦 youtube-transcript-api 설치 중...")
         os.system("pip3 install youtube-transcript-api")
 
-    run_youtube_summary()
+    if not _acquire_lock():
+        exit(0)
+    try:
+        run_youtube_summary()
+    finally:
+        _release_lock()

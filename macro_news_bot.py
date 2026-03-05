@@ -65,7 +65,7 @@ MACRO_QUERIES = {
             "economic data CPI GDP unemployment 2026",
             "FOMC meeting schedule 2026",
         ],
-        "queries_ko": ["실적발표 2026", "바이오 학회 임상", "FOMC 일정", "CPI GDP 발표"],
+        "queries_ko": ["실적발표 2026", "바이오 학회 임상", "FOMC", "CPI GDP 발표", "고용 발표", "주요투자이벤트"],
     },
     "war_safehaven": {
         "label": "⚔️ Special Topic: 이란 전쟁 & 안전자산 동향",
@@ -241,18 +241,46 @@ def analyze_macro_with_claude(category_key: str, news_list: list) -> dict:
   "investment_implication": "한국 시장 영향 150자 이내, 음슴체"
 }}"""
 
-    try:
-        message = claude_client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = message.content[0].text.strip()
-        text = text.replace("```json", "").replace("```", "").strip()
-        return json.loads(text)
-    except Exception as e:
-        print(f"    Claude 오류: {e}")
-        return {"top5": [], "summary": "분석 실패함.", "investment_implication": ""}
+    def _parse_response(text: str) -> dict | None:
+        text = (text or "").strip().replace("```json", "").replace("```", "").strip()
+        for start in ("{", "\n{"):
+            i = text.find(start)
+            if i >= 0:
+                try:
+                    return json.loads(text[i:])
+                except json.JSONDecodeError:
+                    end = text.rfind("}")
+                    if end > i:
+                        try:
+                            return json.loads(text[i : end + 1])
+                        except json.JSONDecodeError:
+                            pass
+        return None
+
+    for attempt in range(2):
+        try:
+            message = claude_client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=2000,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = message.content[0].text.strip()
+            result = _parse_response(text)
+            if result and isinstance(result, dict):
+                result.setdefault("top5", [])
+                result.setdefault("summary", "")
+                result.setdefault("investment_implication", "")
+                return result
+        except Exception as e:
+            print(f"    Claude 오류 (시도 {attempt + 1}/2): {e}")
+        time.sleep(1)
+
+    n = len(news_list)
+    return {
+        "top5": [],
+        "summary": f"뉴스 {n}건 수집됐으나 분석 일시 오류.",
+        "investment_implication": "",
+    }
 
 
 # ────────────────────────────────────────────────
@@ -352,8 +380,11 @@ def run_macro_news():
         news     = collect_category_news(category_key)
         print(f"  🤖 Claude 분석 중...")
         analysis = analyze_macro_with_claude(category_key, news)
-        msg      = format_macro_message(category_key, analysis)
-
+        summary  = (analysis.get("summary") or "").strip()
+        if "오류" in summary or "실패" in summary or "수집된 뉴스 없음" in summary:
+            print(f"  ⏭ 분석 실패 또는 뉴스 없음 → 전송 생략")
+            continue
+        msg = format_macro_message(category_key, analysis)
         print(msg)
         send_telegram(msg)
         time.sleep(3)

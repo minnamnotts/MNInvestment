@@ -3,32 +3,32 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.mni.youtube-jiha</string>
+    <string>com.mni.youtube-summary</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/caffeinate</string>
         <string>-i</string>
         <string>-s</string>
         <string>/usr/local/bin/python3</string>
-        <string>/Users/minsmac/MNI_Finance project/YouTube for Jiha.py</string>
+        <string>/Users/minsmac/MNI_Finance project/youtube_summary_bot.py</string>
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/minsmac/MNI_Finance project</string>
     <key>EnvironmentVariables</key>
     <dict>
-        <key>TELEGRAM_JIHA_ID</key>
-        <string>-1003771013974</string>
+        <key>TELEGRAM_CHANNEL_ID</key>
+        <string>-1003884838661</string>
     </dict>
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
         <integer>8</integer>
         <key>Minute</key>
-        <integer>0</integer>
+        <integer>40</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>/Users/minsmac/MNI_Finance project/youtube_jiha.log</string>
+    <string>/Users/minsmac/MNI_Finance project/youtube_summary.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/minsmac/MNI_Finance project/youtube_jiha_err.log</string>
+    <string>/Users/minsmac/MNI_Finance project/youtube_summary_err.log</string>
 </dict>
 </plist>

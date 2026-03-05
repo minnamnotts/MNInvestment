@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.mni.youtube-jiha</string>
+    <string>com.mni.youtube-jiha-11pm</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/caffeinate</string>
@@ -22,13 +22,13 @@
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
-        <integer>8</integer>
+        <integer>23</integer>
         <key>Minute</key>
         <integer>0</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>/Users/minsmac/MNI_Finance project/youtube_jiha.log</string>
+    <string>/Users/minsmac/MNI_Finance project/youtube_jiha_11pm.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/minsmac/MNI_Finance project/youtube_jiha_err.log</string>
+    <string>/Users/minsmac/MNI_Finance project/youtube_jiha_11pm_err.log</string>
 </dict>
 </plist>

@@ -18,23 +18,53 @@ load_dotenv(os.path.expanduser("~/.env"))
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 YOUTUBE_API_KEY   = os.environ.get("YOUTUBE_API_KEY")
 TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_JIHA_ID")
+# MNI for Jiha 채널로만 발송 (지하 채널 전용, CHAT_ID 사용 안 함)
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_JIHA_ID")
 
 if not all([ANTHROPIC_API_KEY, YOUTUBE_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
     missing = [k for k, v in {
-        "ANTHROPIC_API_KEY":  ANTHROPIC_API_KEY,
-        "YOUTUBE_API_KEY":    YOUTUBE_API_KEY,
-        "TELEGRAM_BOT_TOKEN": TELEGRAM_TOKEN,
-        "TELEGRAM_CHAT_ID": TELEGRAM_CHAT_ID,
+        "ANTHROPIC_API_KEY":   ANTHROPIC_API_KEY,
+        "YOUTUBE_API_KEY":     YOUTUBE_API_KEY,
+        "TELEGRAM_BOT_TOKEN":  TELEGRAM_TOKEN,
+        "TELEGRAM_JIHA_ID":    TELEGRAM_CHAT_ID,
     }.items() if not v]
     print(f"❌ 누락된 환경변수: {', '.join(missing)}")
     exit(1)
 
 claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-# 이미 처리한 영상 ID 저장 (중복 발송 방지)
-_PROCESSED_IDS_FILE = os.path.join(_script_dir, "youtube_summary_processed.json")
+# 이미 처리한 영상 ID 저장 (지하봇 전용, 서머리봇과 분리)
+_PROCESSED_IDS_FILE = os.path.join(_script_dir, "youtube_jiha_processed.json")
+_LOCK_FILE = os.path.join(_script_dir, "youtube_jiha.lock")
 _MAX_PROCESSED_IDS = 500  # 최대 보관 개수 (오래된 것부터 삭제)
+
+
+def _acquire_lock() -> bool:
+    """한 번에 하나의 인스턴스만 실행되도록 lock. 성공 시 True."""
+    try:
+        if os.path.exists(_LOCK_FILE):
+            try:
+                with open(_LOCK_FILE, "r") as f:
+                    pid = int(f.read().strip())
+                os.kill(pid, 0)  # 프로세스 존재하면 예외 없음
+                print(f"⏭ 다른 인스턴스 실행 중 (PID {pid}) → 종료")
+                return False
+            except (ValueError, ProcessLookupError, OSError):
+                os.remove(_LOCK_FILE)
+        with open(_LOCK_FILE, "w") as f:
+            f.write(str(os.getpid()))
+        return True
+    except Exception as e:
+        print(f"⚠️  Lock 오류: {e}")
+        return True  # 실패해도 진행
+
+
+def _release_lock() -> None:
+    try:
+        if os.path.exists(_LOCK_FILE):
+            os.remove(_LOCK_FILE)
+    except Exception:
+        pass
 
 
 def _load_processed_ids() -> set:
@@ -69,6 +99,12 @@ CHANNELS = {
     "올랜도킴": {
         "id": "UCwSSqi-s0wcH6pJbH3YPZqQ",
     },
+    "태린이아빠 주식투자": {
+        "id": "UCxK-Xc4gLgfweW17kmzKN1g",
+    },
+    "위즈덤투스": {
+        "id": "UCiAM9aJjVTmhtYgj0cyTPzA",
+    },
 }
 
 
@@ -85,6 +121,30 @@ def _parse_duration_iso8601(duration: str) -> float:
         return 0
     h, m, s = (int(g) if g else 0 for g in match.groups())
     return h * 60 + m + s / 60
+
+
+def _resolve_channel_id(handle: str) -> str | None:
+    """@핸들 또는 핸들명으로 채널 ID(UC...) 조회"""
+    handle = (handle or "").lstrip("@").strip()
+    if not handle:
+        return None
+    try:
+        url = "https://www.googleapis.com/youtube/v3/channels"
+        params = {"key": YOUTUBE_API_KEY, "part": "id", "forUsername": handle}
+        r = requests.get(url, params=params, timeout=10)
+        data = r.json()
+        if "error" not in data and data.get("items"):
+            return data["items"][0]["id"]
+        # forUsername 실패 시 검색으로 채널 찾기 (@핸들용)
+        search_url = "https://www.googleapis.com/youtube/v3/search"
+        search_params = {"key": YOUTUBE_API_KEY, "part": "snippet", "q": handle, "type": "channel", "maxResults": 1}
+        sr = requests.get(search_url, params=search_params, timeout=10)
+        sdata = sr.json()
+        if "error" not in sdata and sdata.get("items"):
+            return sdata["items"][0]["snippet"]["channelId"]
+        return None
+    except Exception:
+        return None
 
 
 def get_latest_video(channel_name: str, channel_id: str, keyword: str = None) -> dict | None:
@@ -317,6 +377,7 @@ JSON 외 다른 텍스트 없이 순수 JSON만 출력하세요.
 
 [지시사항]
 - key_topics: 핵심 주제를 3~4줄로 자세히 서술. 영상에서 다룬 주요 논점·배경·결론을 구체적으로 설명.
+- stock_mentions: 자막에서 언급된 종목을 최대한 많이 포함. 5~8개 정도 수준으로 추출 (언급이 적으면 실제 개수만).
 
 {{
   "key_topics": "3~4줄로 핵심 주제를 자세히 설명한 문단",
@@ -388,7 +449,7 @@ def format_youtube_message(video_info: dict, summary: dict) -> str:
     stocks = summary.get("stock_mentions", [])
     if stocks:
         lines.append(f"\n📌 *언급 종목*")
-        for s in stocks[:5]:
+        for s in stocks[:8]:
             e = SENTIMENT_EMOJI.get(s.get("view", "중립"), "🟡")
             lines.append(f"{e} {s.get('name', '')} — {s.get('reason', '')}")
 
@@ -436,7 +497,17 @@ def run_youtube_summary():
         print(f"📺 {channel_name} | 키워드: {config.get('keyword', '최신')}")
         print("=" * 60)
 
-        video_info = get_latest_video(channel_name, config["id"], config.get("keyword"))
+        channel_id = config.get("id")
+        if not channel_id and config.get("username"):
+            channel_id = _resolve_channel_id(config["username"])
+            if not channel_id:
+                print(f"    ⚠️  채널 ID 조회 실패 (username: {config['username']})")
+                continue
+        if not channel_id:
+            print(f"    ⚠️  채널 id 또는 username 없음")
+            continue
+
+        video_info = get_latest_video(channel_name, channel_id, config.get("keyword"))
         if not video_info:
             continue
 
@@ -470,4 +541,9 @@ if __name__ == "__main__":
         print("📦 youtube-transcript-api 설치 중...")
         os.system("pip3 install youtube-transcript-api")
 
-    run_youtube_summary()
+    if not _acquire_lock():
+        exit(0)
+    try:
+        run_youtube_summary()
+    finally:
+        _release_lock()
