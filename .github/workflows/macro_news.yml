@@ -19,7 +19,8 @@ jobs:
       - name: 패키지 설치
         run: pip install anthropic requests feedparser python-dotenv
 
-      - name: 실행
+      - name: 매크로 뉴스 브리핑 실행
+        working-directory: agents/news_agent
         env:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           NEWSAPI_KEY:        ${{ secrets.NEWSAPI_KEY }}

@@ -25,8 +25,7 @@ claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # 분석할 종목 (종목명: 종목코드 수동 입력)
 TARGET_STOCKS = {
-  "삼성전자": "005930",
-  "펩트론": "009470",
+  "인벤티지랩": "239670",
 }
 
 
