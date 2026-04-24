@@ -1,3 +1,4 @@
+# Local secrets and runtime artifacts
 .env
 google_key.json
 youtube_summary_processed.json

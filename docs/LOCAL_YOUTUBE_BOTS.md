@@ -1,4 +1,4 @@
-# 유튜브 봇 로컬 실행 가이드
+# YouTube Bots Local Run Guide
 
 ## 1. 수동 실행
 

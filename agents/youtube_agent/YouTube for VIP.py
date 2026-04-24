@@ -10,7 +10,7 @@ import anthropic
 import requests
 from dotenv import load_dotenv
 
-# --- [설정 영역] ---
+# --- Configuration ---
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _project_root = os.path.dirname(os.path.dirname(_script_dir))  # agents/youtube_agent → 프로젝트 루트
 load_dotenv(os.path.join(_project_root, ".env"))   # 로컬/launchd: 프로젝트 루트 .env
