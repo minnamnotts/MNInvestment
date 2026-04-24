@@ -6,3 +6,4 @@ youtube_vip_processed.json
 youtube_vip.lock
 youtube_summary.lock
 *.log
+shared/google_key.json
