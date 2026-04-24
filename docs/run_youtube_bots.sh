@@ -1,5 +1,5 @@
 #!/bin/bash
-# 유튜브 봇 로컬 실행 (서머리봇 + Jiha) - 수동 실행용
+# 유튜브 봇 로컬 실행 (서머리봇 + VIP) - 수동 실행용
 cd "$(dirname "$0")"
 
 echo "=========================================="
@@ -9,9 +9,9 @@ python3 youtube_summary_bot.py
 
 echo ""
 echo "=========================================="
-echo "📺 2) 유튜브 for Jiha 실행"
+echo "📺 2) 유튜브 for VIP 실행"
 echo "=========================================="
-python3 "YouTube for Jiha.py"
+python3 "YouTube for VIP.py"
 
 echo ""
 echo "✅ 모든 유튜브 봇 실행 완료"

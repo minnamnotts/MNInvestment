@@ -20,15 +20,15 @@ load_dotenv(os.path.expanduser("~/.env"))
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 YOUTUBE_API_KEY   = os.environ.get("YOUTUBE_API_KEY")
 TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN")
-# MNI for Jiha 채널로만 발송 (지하 채널 전용, CHAT_ID 사용 안 함)
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_JIHA_ID")
+# MNI for VIP 채널로만 발송 (지하 채널 전용, CHAT_ID 사용 안 함)
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_VIP_ID")
 
 if not all([ANTHROPIC_API_KEY, YOUTUBE_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
     missing = [k for k, v in {
         "ANTHROPIC_API_KEY":   ANTHROPIC_API_KEY,
         "YOUTUBE_API_KEY":     YOUTUBE_API_KEY,
         "TELEGRAM_BOT_TOKEN":  TELEGRAM_TOKEN,
-        "TELEGRAM_JIHA_ID":    TELEGRAM_CHAT_ID,
+        "TELEGRAM_VIP_ID":    TELEGRAM_CHAT_ID,
     }.items() if not v]
     print(f"❌ 누락된 환경변수: {', '.join(missing)}")
     exit(1)
@@ -36,8 +36,8 @@ if not all([ANTHROPIC_API_KEY, YOUTUBE_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
 claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # 이미 처리한 영상 ID 저장 (지하봇 전용, 서머리봇과 분리) — 프로젝트 루트 기준
-_PROCESSED_IDS_FILE = os.path.join(_project_root, "youtube_jiha_processed.json")
-_LOCK_FILE = os.path.join(_project_root, "youtube_jiha.lock")
+_PROCESSED_IDS_FILE = os.path.join(_project_root, "youtube_vip_processed.json")
+_LOCK_FILE = os.path.join(_project_root, "youtube_vip.lock")
 _MAX_PROCESSED_IDS = 500  # 최대 보관 개수 (오래된 것부터 삭제)
 
 

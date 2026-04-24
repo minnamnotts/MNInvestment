@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.mni.youtube-jiha-2pm</string>
+    <string>com.mni.youtube-vip-pm</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/caffeinate</string>
@@ -16,19 +16,19 @@
     <string>/Users/minsmac/MNI_Finance project</string>
     <key>EnvironmentVariables</key>
     <dict>
-        <key>TELEGRAM_JIHA_ID</key>
+        <key>TELEGRAM_VIP_ID</key>
         <string>-1003771013974</string>
     </dict>
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
-        <integer>14</integer>
+        <integer>17</integer>
         <key>Minute</key>
         <integer>0</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>/Users/minsmac/MNI_Finance project/youtube_jiha_2pm.log</string>
+    <string>/Users/minsmac/MNI_Finance project/youtube_vip_pm.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/minsmac/MNI_Finance project/youtube_jiha_2pm_err.log</string>
+    <string>/Users/minsmac/MNI_Finance project/youtube_vip_pm_err.log</string>
 </dict>
 </plist>
