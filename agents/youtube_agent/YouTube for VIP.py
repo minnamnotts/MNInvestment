@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 # --- [설정 영역] ---
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _project_root = os.path.dirname(os.path.dirname(_script_dir))  # agents/youtube_agent → 프로젝트 루트
+load_dotenv(os.path.join(_project_root, ".env"))   # 로컬/launchd: 프로젝트 루트 .env
 load_dotenv(os.path.join(_script_dir, ".env"))
 load_dotenv(os.path.expanduser("~/.env"))
 
@@ -57,7 +58,7 @@ def _acquire_lock() -> bool:
         return True
     except Exception as e:
         print(f"⚠️  Lock 오류: {e}")
-        return True  # 실패해도 진행
+        return False  # 실패해도 진행
 
 
 def _release_lock() -> None:
@@ -76,12 +77,18 @@ def _load_processed_ids() -> set:
         return set()
 
 
-def _save_processed_id(video_id: str, current: set) -> None:
+def _save_processed_id(video_id: str, current: set) -> bool:
+    """저장 성공 시 True, 실패 시 False (디스크 오류 시 중복 발송 방지용)."""
     ids = list(current | {video_id})
     if len(ids) > _MAX_PROCESSED_IDS:
         ids = ids[-_MAX_PROCESSED_IDS:]
-    with open(_PROCESSED_IDS_FILE, "w", encoding="utf-8") as f:
-        json.dump(ids, f, ensure_ascii=False, indent=0)
+    try:
+        with open(_PROCESSED_IDS_FILE, "w", encoding="utf-8") as f:
+            json.dump(ids, f, ensure_ascii=False, indent=0)
+        return True
+    except (OSError, IOError) as e:
+        print(f"    ⚠️  processed ID 저장 실패: {e}")
+        return False
 
 
 # ────────────────────────────────────────────────
@@ -529,9 +536,8 @@ def run_youtube_summary():
         summary = summarize_with_claude(video_info, transcript)
         msg = format_youtube_message(video_info, summary)
         print(msg)
-        if send_telegram(msg):
+        if send_telegram(msg) and _save_processed_id(video_info["video_id"], processed_ids):
             processed_ids.add(video_info["video_id"])
-            _save_processed_id(video_info["video_id"], processed_ids)
         time.sleep(3)
 
 

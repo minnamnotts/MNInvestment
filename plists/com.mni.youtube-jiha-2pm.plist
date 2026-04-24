@@ -3,14 +3,14 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.mni.youtube-jiha-pm</string>
+    <string>com.mni.youtube-jiha-2pm</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/bin/caffeinate</string>
         <string>-i</string>
         <string>-s</string>
         <string>/usr/local/bin/python3</string>
-        <string>/Users/minsmac/MNI_Finance project/agents/youtube_agent/YouTube for Jiha.py</string>
+        <string>/Users/minsmac/MNI_Finance project/agents/youtube_agent/YouTube for VIP.py</string>
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/minsmac/MNI_Finance project</string>
@@ -22,13 +22,13 @@
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
-        <integer>17</integer>
+        <integer>14</integer>
         <key>Minute</key>
         <integer>0</integer>
     </dict>
     <key>StandardOutPath</key>
-    <string>/Users/minsmac/MNI_Finance project/youtube_jiha_pm.log</string>
+    <string>/Users/minsmac/MNI_Finance project/youtube_jiha_2pm.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/minsmac/MNI_Finance project/youtube_jiha_pm_err.log</string>
+    <string>/Users/minsmac/MNI_Finance project/youtube_jiha_2pm_err.log</string>
 </dict>
 </plist>

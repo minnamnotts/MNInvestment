@@ -10,7 +10,7 @@
         <string>-i</string>
         <string>-s</string>
         <string>/usr/local/bin/python3</string>
-        <string>/Users/minsmac/MNI_Finance project/YouTube for Jiha.py</string>
+        <string>/Users/minsmac/MNI_Finance project/agents/youtube_agent/YouTube for Jiha.py</string>
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/minsmac/MNI_Finance project</string>
