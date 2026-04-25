@@ -6,7 +6,7 @@ import time
 import json
 from datetime import datetime
 
-import anthropic
+import ollama
 import requests
 from dotenv import load_dotenv
 
@@ -17,15 +17,13 @@ load_dotenv(os.path.join(_project_root, ".env"))   # 로컬/launchd: 프로젝�
 load_dotenv(os.path.join(_script_dir, ".env"))
 load_dotenv(os.path.expanduser("~/.env"))
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 YOUTUBE_API_KEY   = os.environ.get("YOUTUBE_API_KEY")
 TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN")
-# MNI for VIP 채널로만 발송 (지하 채널 전용, CHAT_ID 사용 안 함)
+# MNI for VIP 채널로만 발송 (VIP 채널 전용, CHAT_ID 사용 안 함)
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_VIP_ID")
 
-if not all([ANTHROPIC_API_KEY, YOUTUBE_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
+if not all([YOUTUBE_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
     missing = [k for k, v in {
-        "ANTHROPIC_API_KEY":   ANTHROPIC_API_KEY,
         "YOUTUBE_API_KEY":     YOUTUBE_API_KEY,
         "TELEGRAM_BOT_TOKEN":  TELEGRAM_TOKEN,
         "TELEGRAM_VIP_ID":    TELEGRAM_CHAT_ID,
@@ -33,9 +31,7 @@ if not all([ANTHROPIC_API_KEY, YOUTUBE_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
     print(f"❌ 누락된 환경변수: {', '.join(missing)}")
     exit(1)
 
-claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-
-# 이미 처리한 영상 ID 저장 (지하봇 전용, 서머리봇과 분리) — 프로젝트 루트 기준
+# 이미 처리한 영상 ID 저장 (VIP봇 전용, 서머리봇과 분리) — 프로젝트 루트 기준
 _PROCESSED_IDS_FILE = os.path.join(_project_root, "youtube_vip_processed.json")
 _LOCK_FILE = os.path.join(_project_root, "youtube_vip.lock")
 _MAX_PROCESSED_IDS = 500  # 최대 보관 개수 (오래된 것부터 삭제)
@@ -404,17 +400,16 @@ JSON 외 다른 텍스트 없이 순수 JSON만 출력하세요.
 }}"""
 
     try:
-        message = claude_client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=3000,
+        response = ollama.chat(
+            model="gemma4:26b",
             messages=[{"role": "user", "content": prompt}],
         )
-        text   = message.content[0].text.strip()
+        text = (response["message"]["content"] or "").strip()
         text   = text.replace("```json", "").replace("```", "").strip()
         result = json.loads(text)
         return result
     except Exception as e:
-        print(f"    ❌ Claude 요약 오류: {e}")
+        print(f"    ❌ Ollama 요약 오류: {e}")
         return {
             "one_line_summary":  "요약 실패",
             "market_view":       "",
@@ -532,7 +527,7 @@ def run_youtube_summary():
             continue
 
         print(f"  ✓ 자막 {len(transcript)}자 추출 완료")
-        print(f"  🤖 Claude 요약 중...")
+        print(f"  🤖 Ollama 요약 중...")
         summary = summarize_with_claude(video_info, transcript)
         msg = format_youtube_message(video_info, summary)
         print(msg)

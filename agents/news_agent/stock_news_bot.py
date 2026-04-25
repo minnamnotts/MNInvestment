@@ -2,7 +2,7 @@ import os
 import time
 from datetime import datetime, timedelta
 
-import anthropic
+import ollama
 import requests
 from dotenv import load_dotenv
 
@@ -11,22 +11,18 @@ _script_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_script_dir, ".env"))
 load_dotenv(os.path.expanduser("~/.env"))
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 NEWSAPI_KEY       = os.environ.get("NEWSAPI_KEY")
 TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHANNEL_ID")
 
-if not all([ANTHROPIC_API_KEY, NEWSAPI_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
+if not all([NEWSAPI_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
     missing = [k for k, v in {
-        "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
         "NEWSAPI_KEY": NEWSAPI_KEY,
         "TELEGRAM_BOT_TOKEN": TELEGRAM_TOKEN,
         "TELEGRAM_CHAT_ID": TELEGRAM_CHAT_ID,
     }.items() if not v]
     print(f"❌ 누락된 환경변수: {', '.join(missing)}")
     exit(1)
-
-claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # 분석할 종목 (종목명: 영문 검색어)
 TARGET_STOCKS = {
@@ -135,10 +131,10 @@ def fetch_all_news(corp_name_ko: str, corp_name_en: str) -> list:
 
 
 # ────────────────────────────────────────────────
-# 2) Claude: Top 3 투자 관련 뉴스 선별 & 요약
+# 2) Ollama: Top 3 투자 관련 뉴스 선별 & 요약
 # ────────────────────────────────────────────────
 def analyze_news_with_claude(corp_name: str, news_list: list) -> dict:
-    """Claude가 투자 관점에서 Top 3 뉴스 선별 & 요약"""
+    """로컬 Ollama가 투자 관점에서 Top 3 뉴스 선별 & 요약"""
     if not news_list:
         return {"top3": [], "overall_summary": "수집된 뉴스 없음."}
 
@@ -175,17 +171,17 @@ def analyze_news_with_claude(corp_name: str, news_list: list) -> dict:
 }}"""
 
     try:
-        message = claude_client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
+        import json
+
+        response = ollama.chat(
+            model="gemma4:26b",
             messages=[{"role": "user", "content": prompt}],
         )
-        import json
-        text = message.content[0].text.strip()
+        text = (response["message"]["content"] or "").strip()
         text = text.replace("```json", "").replace("```", "").strip()
         return json.loads(text)
     except Exception as e:
-        print(f"    Claude 분석 오류: {e}")
+        print(f"    Ollama 분석 오류: {e}")
         return {"top3": [], "overall_summary": "분석 실패"}
 
 
@@ -249,7 +245,7 @@ def send_telegram(message: str) -> bool:
 # 메인 실행
 # ────────────────────────────────────────────────
 def run_stock_news(stocks: dict = None, send_telegram_msg: bool = True):
-    """종목별 뉴스 수집 → Claude 분석 → 텔레그램 발송"""
+    """종목별 뉴스 수집 → Ollama 분석 → 텔레그램 발송"""
     stocks = stocks or TARGET_STOCKS
     total  = len(stocks)
 
@@ -268,7 +264,7 @@ def run_stock_news(stocks: dict = None, send_telegram_msg: bool = True):
             print(f"  ⚠️  뉴스 없음")
             continue
 
-        print(f"  🤖 Claude Top 3 선별 중...")
+        print(f"  🤖 Ollama Top 3 선별 중...")
         analysis = analyze_news_with_claude(name_ko, news)
 
         msg = format_telegram_message(name_ko, analysis)

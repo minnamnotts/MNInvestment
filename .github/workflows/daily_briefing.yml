@@ -1,0 +1,34 @@
+name: Daily briefing
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # ── macro_news 비활성화: 로컬 LaunchAgent + Ollama에서 실행 ──
+  # macro_news:
+  #   name: 매크로 뉴스 브리핑
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.12"
+  #
+  #     - name: 패키지 설치
+  #       run: pip install ollama requests feedparser python-dotenv
+  #
+  #     - name: 매크로 뉴스 브리핑 실행
+  #       working-directory: agents/news_agent
+  #       env:
+  #         NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+  #         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  #         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+  #       run: python macro_news_bot.py
+
+  # macro_news 비활성화 중 — 다른 일일 job 추가 시 아래 제거·대체 가능
+  daily_briefing_placeholder:
+    name: No-op (macro_news commented out)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "macro_news job disabled in daily_briefing.yml"

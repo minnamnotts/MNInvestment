@@ -17,7 +17,7 @@ load_dotenv(os.path.join(_script_dir, ".env"))
 load_dotenv(os.path.expanduser("~/.env"))
 
 SECTOR_SHEET_ID = os.environ.get("SECTOR_SHEET_ID")
-GOOGLE_KEY_PATH = os.path.join(_script_dir, "google_key.json")
+GOOGLE_KEY_PATH = "/Users/minnam/MNInvestment/shared/google_key.json"
 
 # ────────────────────────────────────────────────
 # 섹터 설정 (업종코드: 네이버 금융 upjong no)

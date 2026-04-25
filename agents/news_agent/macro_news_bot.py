@@ -3,7 +3,7 @@ import time
 import json
 from datetime import datetime, timedelta
 
-import anthropic
+import ollama
 import requests
 from dotenv import load_dotenv
 
@@ -12,22 +12,18 @@ _script_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_script_dir, ".env"))
 load_dotenv(os.path.expanduser("~/.env"))
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 NEWSAPI_KEY       = os.environ.get("NEWSAPI_KEY")
 TELEGRAM_TOKEN    = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID  = os.environ.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHANNEL_ID")
 
-if not all([ANTHROPIC_API_KEY, NEWSAPI_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
+if not all([NEWSAPI_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
     missing = [k for k, v in {
-        "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
         "NEWSAPI_KEY": NEWSAPI_KEY,
         "TELEGRAM_BOT_TOKEN": TELEGRAM_TOKEN,
         "TELEGRAM_CHAT_ID": TELEGRAM_CHAT_ID,
     }.items() if not v]
     print(f"❌ 누락된 환경변수: {', '.join(missing)}")
     exit(1)
-
-claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # ────────────────────────────────────────────────
 # 검색 쿼리 정의
@@ -193,11 +189,11 @@ def collect_category_news(category_key: str) -> list:
             unique.append(n)
 
     print(f"    ✓ {len(unique)}개 뉴스 수집")
-    return unique[:30]  # 최대 30개만 Claude에 전달
+    return unique[:30]  # 최대 30개만 LLM에 전달
 
 
 # ────────────────────────────────────────────────
-# Claude 분석
+# Ollama 분석
 # ────────────────────────────────────────────────
 def analyze_macro_with_claude(category_key: str, news_list: list) -> dict:
     cat = MACRO_QUERIES[category_key]
@@ -259,12 +255,11 @@ def analyze_macro_with_claude(category_key: str, news_list: list) -> dict:
 
     for attempt in range(2):
         try:
-            message = claude_client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=2000,
+            response = ollama.chat(
+                model="gemma4:26b",
                 messages=[{"role": "user", "content": prompt}],
             )
-            text = message.content[0].text.strip()
+            text = (response["message"]["content"] or "").strip()
             result = _parse_response(text)
             if result and isinstance(result, dict):
                 result.setdefault("top5", [])
@@ -272,7 +267,7 @@ def analyze_macro_with_claude(category_key: str, news_list: list) -> dict:
                 result.setdefault("investment_implication", "")
                 return result
         except Exception as e:
-            print(f"    Claude 오류 (시도 {attempt + 1}/2): {e}")
+            print(f"    Ollama 오류 (시도 {attempt + 1}/2): {e}")
         time.sleep(1)
 
     n = len(news_list)
@@ -378,7 +373,7 @@ def run_macro_news():
         print("=" * 60)
 
         news     = collect_category_news(category_key)
-        print(f"  🤖 Claude 분석 중...")
+        print(f"  🤖 Ollama 분석 중...")
         analysis = analyze_macro_with_claude(category_key, news)
         summary  = (analysis.get("summary") or "").strip()
         if "오류" in summary or "실패" in summary or "수집된 뉴스 없음" in summary:

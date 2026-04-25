@@ -2,7 +2,7 @@ import os
 import time
 
 import OpenDartReader
-import anthropic
+import ollama
 import gspread
 import pandas as pd
 from dotenv import load_dotenv
@@ -15,16 +15,14 @@ load_dotenv(os.path.join(_script_dir, ".env"))
 load_dotenv(os.path.join(_script_dir, "..", ".env"))
 load_dotenv(os.path.expanduser("~/.env"))
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 DART_API_KEY = os.environ.get("DART_API_KEY")
 
-if not ANTHROPIC_API_KEY or not DART_API_KEY:
+if not DART_API_KEY:
     print("❌ 오류: API 키를 로드할 수 없습니다. .env 파일을 확인하세요.")
-    print("   필요한 변수: ANTHROPIC_API_KEY, DART_API_KEY")
+    print("   필요한 변수: DART_API_KEY")
     exit(1)
 
 # 클라이언트 초기화
-claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 dart = OpenDartReader(DART_API_KEY)
 
 
@@ -53,7 +51,7 @@ def get_latest_disclosure(corp_name):
 
 
 def analyze_with_claude(text, max_retries=3):
-    """공시 내용을 Claude로 분석 (계약, 임상, 기술수출). 오류 시 재시도."""
+    """공시 내용을 로컬 Ollama로 분석 (계약, 임상, 기술수출). 오류 시 재시도."""
     prompt = f"""다음 바이오 기업 공시 내용을 분석해주세요. 아래 형식으로 답변해주세요.
 
 ## 분석 요청
@@ -67,12 +65,11 @@ def analyze_with_claude(text, max_retries=3):
 """
     for attempt in range(max_retries):
         try:
-            message = claude_client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1024,
+            response = ollama.chat(
+                model="gemma4:26b",
                 messages=[{"role": "user", "content": prompt}],
             )
-            return message.content[0].text
+            return (response["message"]["content"] or "").strip()
 
         except Exception as e:
             if "rate" in str(e).lower() or "429" in str(e):

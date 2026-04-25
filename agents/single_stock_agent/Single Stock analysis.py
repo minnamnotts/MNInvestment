@@ -2,7 +2,7 @@ import os
 import time
 from datetime import datetime, timedelta
 
-import anthropic
+import ollama
 import gspread
 import pandas as pd
 import ta as ta_lib
@@ -16,12 +16,6 @@ _script_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_script_dir, ".env"))
 load_dotenv(os.path.expanduser("~/.env"))
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-if not ANTHROPIC_API_KEY:
-    print("❌ 오류: ANTHROPIC_API_KEY를 로드할 수 없습니다.")
-    exit(1)
-
-claude_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 # 분석할 종목 (종목명: 종목코드 수동 입력)
 TARGET_STOCKS = {
@@ -219,10 +213,10 @@ def get_financials_yfinance(ticker: str) -> dict:
 
 
 # ────────────────────────────────────────────────
-# 4) Claude: 통합 분석
+# 4) Ollama: 통합 분석
 # ────────────────────────────────────────────────
 def analyze_with_claude(name: str, tech: dict, fin: dict, bench: dict, sector: str, max_retries=3) -> str:
-    """수집한 데이터를 Claude에게 넘겨 투자 오버뷰 생성"""
+    """수집한 데이터를 로컬 Ollama에 넘겨 투자 오버뷰 생성"""
 
     bench_text = "없음"
     if bench:
@@ -281,20 +275,20 @@ def analyze_with_claude(name: str, tech: dict, fin: dict, bench: dict, sector: s
 
     for attempt in range(max_retries):
         try:
-            message = claude_client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=1500,
+            response = ollama.chat(
+                model="gemma4:26b",
                 messages=[{"role": "user", "content": prompt}],
             )
-            return message.content[0].text
-        except anthropic.RateLimitError:
-            if attempt < max_retries - 1:
-                print(f"   ⏳ API 할당량 초과. 35초 후 재시도...")
+            return (response["message"]["content"] or "").strip()
+        except Exception as e:
+            err = str(e).lower()
+            if attempt < max_retries - 1 and any(
+                x in err for x in ("rate", "429", "timeout", "connection", "busy", "resource")
+            ):
+                print(f"   ⏳ Ollama 일시 오류. 35초 후 재시도... ({e})")
                 time.sleep(35)
             else:
                 raise
-        except anthropic.APIError as e:
-            raise
 
 
 # ────────────────────────────────────────────────
@@ -355,8 +349,8 @@ def upload_to_google_sheet(results: list, sheet_name: str, key_file="google_key.
             ]
             ws.update([headers, row_data])
 
-            # 2) Claude 분석 전문 (요약 아래 공백 두고)
-            ws.update_acell("A4", "Claude 투자 오버뷰")
+            # 2) Ollama 분석 전문 (요약 아래 공백 두고)
+            ws.update_acell("A4", "Ollama 투자 오버뷰")
             ws.update_acell("A5", r.get("analysis", ""))
 
             print(f"  ✓ 탭 생성: {tab_title}")
@@ -398,7 +392,7 @@ def run_analysis(upload=True, sheet_name="StockAnalysis"):
         if bench:
             print(f"  📊 동종업계 벤치마크: {sector} (PER {bench.get('per')}, ROE {bench.get('roe')}%)")
 
-        print(f"  🤖 Claude 분석 중...")
+        print(f"  🤖 Ollama 분석 중...")
         analysis = analyze_with_claude(name, tech, fin, bench, sector)
         print(f"\n{'─'*40}")
         print(f"[{name} 투자 오버뷰]")

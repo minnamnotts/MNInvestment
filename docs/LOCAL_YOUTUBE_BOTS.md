@@ -20,7 +20,7 @@ python3 "YouTube for VIP.py"     # MNI for VIP 개인용
 
 **처리 이력 (중복 방지)**  
 - 서머리봇: `youtube_summary_processed.json`  
-- 지하봇: `youtube_vip_processed.json` (서로 분리됨)
+- VIP봇: `youtube_vip_processed.json` (서로 분리됨)
 
 ```bash
 cd "/Users/minsmac/MNI_Finance project"
